@@ -6,6 +6,7 @@ from enum import Enum, auto
 # D -> BD | B | S
 # B -> 1 | 2 | 3
 
+
 class TokenType(Enum):
     TAG_TABLE_OPEN = auto()
     TAG_TABLE_CLOSE = auto()
@@ -18,13 +19,20 @@ class TokenType(Enum):
     UNKNOWN = auto()
 
 
-class Lexeme:
-    def __init__(self, line_num: int, token: TokenType, value: str, pos: int):
+class Lex:
+
+    def __init__(self, line_num: int, token: TokenType, value: str):
         self.line_num = line_num
         self.token = token
         self.value = value
-        self.pos = pos
 
+    def __str__(self):
+        return f"<{self.line_num}, {self.token.name}, {self.value}>"
+
+
+current_line = ""
+current_line_num = 0
+pos = 0
 
 KNOWN_TAGS = {
     "<table>": TokenType.TAG_TABLE_OPEN,
@@ -36,39 +44,44 @@ KNOWN_TAGS = {
 }
 
 
-def lex_line(line_num: int, line_text: str) -> list[Lexeme]:
-    tokens = []
+def init_line(line_num: int, line_text: str):
+    global current_line, current_line_num, pos
+    current_line = line_text
+    current_line_num = line_num
     pos = 0
-    length = len(line_text)
 
-    while pos < length:
-        if line_text[pos] in " \t\r\n":
-            pos += 1
-            continue
 
-        ch = line_text[pos]
+def get_token() -> Lex:
+    global pos, current_line, current_line_num
 
-        if ch == "<":
-            start = pos
-            while pos < length and line_text[pos] != ">" and not line_text[pos].isspace():
-                pos += 1
-            if pos < length and line_text[pos] == ">":
-                pos += 1
-            tag_str = line_text[start:pos]
-            token_type = KNOWN_TAGS.get(tag_str, TokenType.UNKNOWN)
-            tokens.append(Lexeme(line_num, token_type, tag_str, start + 1))
-            continue
-
-        if ch in ("1", "2", "3"):
-            tokens.append(Lexeme(line_num, TokenType.DIGIT, ch, pos + 1))
-            pos += 1
-            continue
-
-        tokens.append(Lexeme(line_num, TokenType.UNKNOWN, ch, pos + 1))
+    while pos < len(current_line) and current_line[pos] in " \t\r\n":
         pos += 1
 
-    tokens.append(Lexeme(line_num, TokenType.END, "END", length + 1))
-    return tokens
+    if pos >= len(current_line):
+        return Lex(current_line_num, TokenType.END, "END")
+
+    ch = current_line[pos]
+
+    if ch == "<":
+        start = pos
+        while (
+            pos < len(current_line)
+            and current_line[pos] != ">"
+            and not current_line[pos].isspace()
+        ):
+            pos += 1
+        if pos < len(current_line) and current_line[pos] == ">":
+            pos += 1
+        tag = current_line[start:pos]
+        token_type = KNOWN_TAGS.get(tag, TokenType.UNKNOWN)
+        return Lex(current_line_num, token_type, tag)
+
+    if ch in ("1", "2", "3"):
+        pos += 1
+        return Lex(current_line_num, TokenType.DIGIT, ch)
+
+    pos += 1
+    return Lex(current_line_num, TokenType.UNKNOWN, ch)
 
 
 class SyntaxErrorExceptions(Exception):
@@ -76,17 +89,22 @@ class SyntaxErrorExceptions(Exception):
 
 
 class Parser:
-    def __init__(self, tokens: list[Lexeme]):
-        self.tokens = tokens
-        self.idx = 0
 
-    def current(self) -> Lexeme:
-        return self.tokens[self.idx]
+    def __init__(self):
+        self.curr_token = get_token()
+
+    def current(self) -> Lex:
+        if self.curr_token.token == TokenType.UNKNOWN:
+            raise SyntaxErrorExceptions(
+                f"Лексична — недопустима лексема '{self.curr_token.value}'."
+            )
+        return self.curr_token
 
     def match(self, expected_type: TokenType):
         curr = self.current()
         if curr.token == expected_type:
-            self.idx += 1
+            # Зчитуємо наступну лексему з потоку
+            self.curr_token = get_token()
             return curr
         else:
             raise SyntaxErrorExceptions(
@@ -174,29 +192,17 @@ def main():
     with open("output.txt", "w", encoding="utf-8") as fout:
         for i, line in enumerate(lines, start=1):
             fout.write(f"Речення №{i}: {line}\n")
-            tokens = lex_line(i, line)
 
-            lexical_error = None
-            for tok in tokens:
-                if tok.token == TokenType.UNKNOWN:
-                    lexical_error = (
-                        f"  [!] Помилка (символ {tok.pos}): Лексична — недопустима лексема '{tok.value}'.\n"
-                        f"  ==> Висновок: НЕ НАЛЕЖИТЬ мові граматики.\n\n"
-                    )
-                    break
+            init_line(i, line)
 
-            if lexical_error:
-                fout.write(lexical_error)
-                continue
+            parser = Parser()
 
-            parser = Parser(tokens)
             try:
                 parser.parse()
                 fout.write("  [+] Успіх: Синтаксичний аналіз пройдено.\n")
                 fout.write("  ==> Висновок: НАЛЕЖИТЬ мові граматики.\n\n")
             except SyntaxErrorExceptions as e:
-                curr_pos = parser.current().pos
-                fout.write(f"  [!] Помилка (символ {curr_pos}): {e}\n")
+                fout.write(f"  [!] Помилка: {e}\n")
                 fout.write("  ==> Висновок: НЕ НАЛЕЖИТЬ мові граматики.\n\n")
 
 
