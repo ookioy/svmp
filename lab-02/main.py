@@ -1,5 +1,10 @@
 from enum import Enum, auto
 
+# S -> <table>R</table>
+# R -> <tr>C</tr>R | e
+# C -> <td>D</td>C | e
+# D -> BD | B | S
+# B -> 1 | 2 | 3
 
 class TokenType(Enum):
     TAG_TABLE_OPEN = auto()
@@ -88,11 +93,13 @@ class Parser:
                 f"Синтаксична — очікувався тег '{expected_type.name}', але виявлено '{curr.value}'."
             )
 
+    # S -> <table>R</table>
     def parse_S(self):
         self.match(TokenType.TAG_TABLE_OPEN)
         self.parse_R()
         self.match(TokenType.TAG_TABLE_CLOSE)
 
+    # R -> <tr>C</tr>R | e
     def parse_R(self):
         curr = self.current()
         if curr.token == TokenType.TAG_TR_OPEN:
@@ -107,6 +114,7 @@ class Parser:
                 f"Синтаксична — очікувалось '<tr>' або '</table>', але виявлено '{curr.value}'."
             )
 
+    # C -> <td>D</td>C | e
     def parse_C(self):
         curr = self.current()
         if curr.token == TokenType.TAG_TD_OPEN:
@@ -121,30 +129,26 @@ class Parser:
                 f"Синтаксична — очікувалось '<td>' або '</tr>', але виявлено '{curr.value}'."
             )
 
-    def parse_D(self):
+    # D -> BD | B | S
+    def parse_D(self, allow_epsilon=False):
         curr = self.current()
         if curr.token == TokenType.DIGIT:
             self.parse_B()
-            self.parse_D_prime()
-        elif curr.token == TokenType.TAG_TABLE_OPEN:
+            self.parse_D(allow_epsilon=True)
+        elif curr.token == TokenType.TAG_TABLE_OPEN and not allow_epsilon:
             self.parse_S()
+        elif allow_epsilon and curr.token == TokenType.TAG_TD_CLOSE:
+            return
         else:
+            if allow_epsilon:
+                raise SyntaxErrorExceptions(
+                    f"Синтаксична — неочікуваний символ '{curr.value}'."
+                )
             raise SyntaxErrorExceptions(
                 f"Синтаксична — очікувалася цифра (1, 2, 3) або '<table>', виявлено '{curr.value}'."
             )
 
-    def parse_D_prime(self):
-        curr = self.current()
-        if curr.token == TokenType.DIGIT:
-            self.parse_B()
-            self.parse_D_prime()
-        elif curr.token == TokenType.TAG_TD_CLOSE:
-            return
-        else:
-            raise SyntaxErrorExceptions(
-                f"Синтаксична — неочікуваний символ '{curr.value}'."
-            )
-
+    # B -> 1 | 2 | 3
     def parse_B(self):
         curr = self.current()
         if curr.token == TokenType.DIGIT and curr.value in ("1", "2", "3"):
