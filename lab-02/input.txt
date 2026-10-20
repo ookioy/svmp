@@ -1,0 +1,6 @@
+1<table>3<tr><td>12</td></tr></table>
+<table><tr><td><table><tr><td>3</td></tr></table></td></tr></table>
+/<table><tr><td><table><tr><td>3</td></tr></table></td></tr></table>
+<table><tr><td>312</td></tr></table>
+<table><tr><td>1</td><td>4</td></tr></table>
+<table><tr><td>23</td><invalid></tr></table>
